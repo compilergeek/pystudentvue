@@ -21,6 +21,9 @@ class _StudentVueApi:
         self.password = password
         self.endpoint = endpoint
 
+        if self._gradebook() is None:
+            raise AssertionError("Login error")
+
     def _gradebook(self, reporting_period_index=None):
         data = {}
         data["userID"] = self.username
@@ -42,8 +45,12 @@ class _StudentVueApi:
         r = requests.request(method="POST", url=self.district_url + self.endpoint, data=data, headers=headers)
         unescaped = su.unescape(r.text)
         converted = xmltodict.parse(unescaped)
-        gradebook = json.loads(json.dumps(converted))['string']["Gradebook"]
 
+        converted_json = json.loads(json.dumps(converted))['string']
+        if "RT_ERROR" in converted_json:
+            return None
+
+        gradebook = json.loads(json.dumps(converted))['string']["Gradebook"]
         return gradebook
 
     def _gradebook_overview(self, gradebook):
