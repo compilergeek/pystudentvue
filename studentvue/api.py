@@ -137,9 +137,9 @@ class _Assignment:
             #Raw score
             score_process = score.split(" out of ")
 
-            self.rawScoreEarned = Decimal(score_process[0].strip())
-            self.rawScorePossible = Decimal(score_process[1].strip())
-            self.score = (self.rawScoreEarned / self.rawScorePossible) * Decimal(100)
+            self.raw_score_earned = Decimal(score_process[0].strip())
+            self.raw_score_possible = Decimal(score_process[1].strip())
+            self.score = (self.raw_score_earned / self.raw_score_possible) * Decimal(100)
         elif "()" in score:
             score = score.replace("()", "")
             self.score = Decimal(score.strip())
