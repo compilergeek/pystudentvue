@@ -9,6 +9,17 @@ def create(district_url, username, password):
     return _StudentVueApi(district_url, username, password)
 
 
+class StudentVueHelper(object):
+
+    @staticmethod
+    def find_assignment_by_id(courses, assignment_id):
+        for course in courses:
+            assignments = course.assignments
+            for assignment in assignments:
+                if assignment.id == assignment_id:
+                    return assignment
+        return None
+
 class _StudentVueApi:
 
     def __init__(self, district_url, username, password,
@@ -84,7 +95,8 @@ class _StudentVueApi:
                     end_date=assignment["@DropEndDate"],
                     due_date=assignment["@DueDate"],
                     date=assignment["@Date"],
-                    assignment_type=assignment["@Type"]
+                    assignment_type=assignment["@Type"],
+                    id=assignment["@GradebookID"]
                 ))
             courses.append(_CourseInfo(course["@Title"], course["@Period"], course["@StaffEMail"], course["@Room"],
                                        course["@Staff"], assignments, course["Marks"]["Mark"]["@CalculatedScoreRaw"],
@@ -116,8 +128,9 @@ class _CourseInfo:
 
 class _Assignment:
 
-    def __init__(self, title, score_type, score, description, start_date, end_date, due_date, date, assignment_type):
+    def __init__(self, title, score_type, score, description, start_date, end_date, due_date, date, assignment_type, id):
         self.title = title
+        self.id = id
         self.score_type = score_type
 
         if "out of" in score:
