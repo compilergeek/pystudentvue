@@ -20,6 +20,7 @@ class StudentVueHelper(object):
                     return assignment
         return None
 
+
 class _StudentVueApi:
 
     def __init__(self, district_url, username, password,
@@ -85,19 +86,30 @@ class _StudentVueApi:
         courses = []
         for course in gradebook["Courses"]["Course"]:
             assignments = []
-            for assignment in course["Marks"]["Mark"]["Assignments"]["Assignment"]:
-                assignments.append(_Assignment(
-                    title=assignment["@Measure"],
-                    score_type=assignment["@ScoreType"],
-                    score=assignment["@Score"],
-                    description=assignment["@MeasureDescription"],
-                    start_date=assignment["@DropStartDate"],
-                    end_date=assignment["@DropEndDate"],
-                    due_date=assignment["@DueDate"],
-                    date=assignment["@Date"],
-                    assignment_type=assignment["@Type"],
-                    id=assignment["@GradebookID"]
-                ))
+
+            if course["Marks"]["Mark"]["Assignments"] is not None:
+                for assignment in course["Marks"]["Mark"]["Assignments"]["Assignment"]:
+                    should_exit = False
+                    if type(course["Marks"]["Mark"]["Assignments"]["Assignment"]) is dict:
+                        assignment = course["Marks"]["Mark"]["Assignments"]["Assignment"]
+                        should_exit = True
+
+                    assignments.append(_Assignment(
+                        title=assignment["@Measure"],
+                        score_type=assignment["@ScoreType"],
+                        score=assignment["@Score"],
+                        description=assignment["@MeasureDescription"],
+                        start_date=assignment["@DropStartDate"],
+                        end_date=assignment["@DropEndDate"],
+                        due_date=assignment["@DueDate"],
+                        date=assignment["@Date"],
+                        assignment_type=assignment["@Type"],
+                        id=assignment["@GradebookID"]
+                    ))
+
+                    if should_exit:
+                        break
+
             courses.append(_CourseInfo(course["@Title"], course["@Period"], course["@StaffEMail"], course["@Room"],
                                        course["@Staff"], assignments, course["Marks"]["Mark"]["@CalculatedScoreRaw"],
                                        course["Marks"]["Mark"]["@CalculatedScoreString"]))
