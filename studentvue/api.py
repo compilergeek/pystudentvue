@@ -1,5 +1,5 @@
 """
-    Copyright (C) 2018 Yoland Gao
+    Copyright (C) 2019 Yoland Gao
 
     This program is free software: you can redistribute it and/or modify
     it under the terms of the GNU Affero General Public License as
@@ -21,8 +21,8 @@ from xml.sax import saxutils as su
 from decimal import Decimal
 
 
-def create(district_url, username, password):
-    return _StudentVueApi(district_url, username, password)
+def create(district_url, username, password, check_login_credentials=True):
+    return _StudentVueApi(district_url, username, password, check_login_credentials=check_login_credentials)
 
 
 class StudentVueHelper(object):
@@ -40,7 +40,7 @@ class StudentVueHelper(object):
 class _StudentVueApi:
 
     def __init__(self, district_url, username, password,
-                 endpoint="/Service/PXPCommunication.asmx/ProcessWebServiceRequest"):
+                 endpoint="/Service/PXPCommunication.asmx/ProcessWebServiceRequest", check_login_credentials=True):
         assert endpoint.startswith("/")
         assert not endpoint.endswith("/")
 
@@ -49,7 +49,7 @@ class _StudentVueApi:
         self.password = password
         self.endpoint = endpoint
 
-        if self._gradebook() is None:
+        if check_login_credentials and self._gradebook() is None:
             raise AssertionError("Login error")
 
     def _gradebook(self, reporting_period_index=None):
@@ -72,6 +72,8 @@ class _StudentVueApi:
 
         r = requests.request(method="POST", url=self.district_url + self.endpoint, data=data, headers=headers)
         unescaped = su.unescape(r.text)
+        if "System.NullReferenceException" in unescaped:
+            return None
         converted = xmltodict.parse(unescaped)
 
         converted_json = json.loads(json.dumps(converted))['string']
@@ -82,6 +84,8 @@ class _StudentVueApi:
         return gradebook
 
     def _gradebook_overview(self, gradebook):
+        if gradebook == None:
+            return None, None
         periods = []
         current_period = None
         for period in gradebook["ReportingPeriods"]["ReportPeriod"]:
@@ -97,17 +101,29 @@ class _StudentVueApi:
 
     def gradebook_detailed(self, reporting_period):
         gradebook = self._gradebook(reporting_period.index)
+        if gradebook is None:
+            raise AssertionError()
         periods, current_period = self._gradebook_overview(gradebook)
 
         courses = []
         for course in gradebook["Courses"]["Course"]:
             assignments = []
+            marks_root = None
+            assignments_root = None
 
-            if course["Marks"]["Mark"]["Assignments"] is not None:
-                for assignment in course["Marks"]["Mark"]["Assignments"]["Assignment"]:
+            if course is not None and "Marks" in course and course["Marks"] is not None and "Mark" in course["Marks"]:
+                if type(course["Marks"]["Mark"]) == list:
+                    marks_root = course["Marks"]["Mark"][0]
+                    assignments_root = marks_root["Assignments"]
+                else:
+                    marks_root = course["Marks"]["Mark"]
+                    assignments_root = course["Marks"]["Mark"]["Assignments"]
+
+            if assignments_root is not None:
+                for assignment in assignments_root["Assignment"]:
                     should_exit = False
-                    if type(course["Marks"]["Mark"]["Assignments"]["Assignment"]) is dict:
-                        assignment = course["Marks"]["Mark"]["Assignments"]["Assignment"]
+                    if type(assignments_root["Assignment"]) is dict:
+                        assignment = assignments_root["Assignment"]
                         should_exit = True
 
                     assignments.append(_Assignment(
@@ -120,15 +136,24 @@ class _StudentVueApi:
                         due_date=assignment["@DueDate"],
                         date=assignment["@Date"],
                         assignment_type=assignment["@Type"],
-                        id=assignment["@GradebookID"]
+                        id=assignment["@GradebookID"],
+                        for_grading=(not (assignment["@Notes"] == "(Not For Grading)"))
                     ))
 
                     if should_exit:
                         break
 
+            if marks_root is None:
+                score_raw = 0
+                score_string = "N/A"
+            else:
+                score_raw = marks_root["@CalculatedScoreRaw"]
+                score_string = marks_root["@CalculatedScoreString"]
+
+
             courses.append(_CourseInfo(course["@Title"], course["@Period"], course["@StaffEMail"], course["@Room"],
-                                       course["@Staff"], assignments, course["Marks"]["Mark"]["@CalculatedScoreRaw"],
-                                       course["Marks"]["Mark"]["@CalculatedScoreString"]))
+                                       course["@Staff"], assignments, score_raw,
+                                       score_string))
         return periods, current_period, courses
 
 
@@ -156,7 +181,7 @@ class _CourseInfo:
 
 class _Assignment:
 
-    def __init__(self, title, score_type, score, description, start_date, end_date, due_date, date, assignment_type, id):
+    def __init__(self, title, score_type, score, description, start_date, end_date, due_date, date, assignment_type, id, for_grading):
         self.title = title
         self.id = id
         self.score_type = score_type
@@ -167,7 +192,11 @@ class _Assignment:
 
             self.raw_score_earned = Decimal(score_process[0].strip())
             self.raw_score_possible = Decimal(score_process[1].strip())
-            self.score = (self.raw_score_earned / self.raw_score_possible) * Decimal(100)
+
+            if self.raw_score_possible <= 0:
+                self.score = 100
+            else:
+                self.score = (self.raw_score_earned / self.raw_score_possible) * Decimal(100)
         elif "()" in score:
             score = score.replace("()", "")
             self.score = Decimal(score.strip())
@@ -181,3 +210,4 @@ class _Assignment:
         self.due_date = due_date
         self.date = date
         self.assignment_type = assignment_type
+        self.for_grading = for_grading
